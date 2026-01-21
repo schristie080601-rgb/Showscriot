@@ -1,0 +1,132 @@
+print("fucked by shadow")
+
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+local MainWindow = Rayfield:CreateWindow({
+   Name = "Shadow Hub | Mobile",
+   Icon = 0,
+   LoadingTitle = "Loading...",
+   LoadingSubtitle = "by Shadow",
+   Theme = "Default",
+   ConfigurationSaving = { Enabled = true, FolderName = "ShadowHub", FileName = "config" },
+   KeySystem = false
+})
+
+local MainTab = MainWindow:CreateTab("Main", 4483362458)
+local CombatTab = MainWindow:CreateTab("Combat", 4483362458)
+
+-- Variables
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local RunService = game:GetService("RunService")
+local Camera = workspace.CurrentCamera
+
+-- Speed/Fly Variables
+local SpeedEnabled = false
+local WalkSpeedValue = 16
+local Flying = false
+local FlySpeed = 50
+
+-- MAIN TAB UI
+MainTab:CreateButton({
+   Name = "Print Hello",
+   Callback = function() print("hello") end,
+})
+
+-- SPEED SECTION
+MainTab:CreateToggle({
+   Name = "Enable Speed",
+   CurrentValue = false,
+   Flag = "SpeedToggle",
+   Callback = function(Value)
+       SpeedEnabled = Value
+       if not Value then
+           -- Reset to default when turned off
+           local Hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+           if Hum then Hum.WalkSpeed = 16 end
+       end
+   end,
+})
+
+MainTab:CreateSlider({
+   Name = "WalkSpeed",
+   Range = {16, 500},
+   Increment = 1,
+   Suffix = "Studs",
+   CurrentValue = 16,
+   Flag = "SpeedSlider",
+   Callback = function(Value)
+       WalkSpeedValue = Value
+   end,
+})
+
+-- FLY SECTION
+MainTab:CreateToggle({
+   Name = "Mobile Fly",
+   CurrentValue = false,
+   Callback = function(Value)
+       Flying = Value
+       local Character = LocalPlayer.Character
+       if Character and Character:FindFirstChild("HumanoidRootPart") then
+           if Flying then
+               local BV = Instance.new("BodyVelocity", Character.HumanoidRootPart)
+               BV.Name = "FlyBV"
+               BV.MaxForce = Vector3.new(1e6, 1e6, 1e6)
+               BV.Velocity = Vector3.new(0, 0, 0)
+
+               local BG = Instance.new("BodyGyro", Character.HumanoidRootPart)
+               BG.Name = "FlyBG"
+               BG.MaxTorque = Vector3.new(1e6, 1e6, 1e6)
+               BG.CFrame = Character.HumanoidRootPart.CFrame
+               
+               Character.Humanoid.PlatformStand = true
+           else
+               if Character.HumanoidRootPart:FindFirstChild("FlyBV") then Character.HumanoidRootPart.FlyBV:Destroy() end
+               if Character.HumanoidRootPart:FindFirstChild("FlyBG") then Character.HumanoidRootPart.FlyBG:Destroy() end
+               Character.Humanoid.PlatformStand = false
+           end
+       end
+   end,
+})
+
+MainTab:CreateSlider({
+   Name = "Fly Speed",
+   Range = {10, 500},
+   Increment = 5,
+   Suffix = "Speed",
+   CurrentValue = 50,
+   Callback = function(Value)
+       FlySpeed = Value
+   end,
+})
+
+-- COMBAT TAB (Aimlock)
+local AimlockEnabled = false
+CombatTab:CreateToggle({
+   Name = "Aimlock",
+   CurrentValue = false,
+   Callback = function(Value) AimlockEnabled = Value end,
+})
+
+-- CORE LOOP (Handles Speed, Fly, and Aimlock)
+RunService.RenderStepped:Connect(function()
+    local Character = LocalPlayer.Character
+    if not Character then return end
+    local Hum = Character:FindFirstChildOfClass("Humanoid")
+    local Root = Character:FindFirstChild("HumanoidRootPart")
+
+    -- Constant Speed Logic (Bypasses most anti-cheats that reset speed)
+    if SpeedEnabled and Hum and not Flying then
+        Hum.WalkSpeed = WalkSpeedValue
+    end
+
+    -- Fly Logic
+    if Flying and Root and Hum then
+        local BV = Root:FindFirstChild("FlyBV")
+        local BG = Root:FindFirstChild("FlyBG")
+        if BV and BG then
+            BV.Velocity = Hum.MoveDirection * FlySpeed
+            BG.CFrame = Camera.CFrame
+        end
+    end
+end)
