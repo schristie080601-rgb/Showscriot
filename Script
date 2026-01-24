@@ -5,11 +5,23 @@ local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 local MainWindow = Rayfield:CreateWindow({
    Name = "Shadow Hub | Mobile",
    Icon = 0,
-   LoadingTitle = "Loading...",
+   LoadingTitle = "Shadow Hub Loading...",
    LoadingSubtitle = "by Shadow",
-   Theme = "Default",
+   Theme = "Ocean", 
    ConfigurationSaving = { Enabled = true, FolderName = "ShadowHub", FileName = "config" },
-   KeySystem = false
+   
+   -- KEY SYSTEM START
+   KeySystem = true, 
+   KeySettings = {
+      Title = "Shadow Hub | Key System",
+      Subtitle = "Enter the access key",
+      Note = "The key is: main", -- You can change this note
+      FileName = "ShadowKey", 
+      SaveKey = true, 
+      GrabKeyFromSite = false, 
+      Key = {"main"} -- This is where the key is set
+   }
+   -- KEY SYSTEM END
 })
 
 local MainTab = MainWindow:CreateTab("Main", 4483362458)
@@ -21,30 +33,18 @@ local LocalPlayer = Players.LocalPlayer
 local RunService = game:GetService("RunService")
 local Camera = workspace.CurrentCamera
 
--- Speed/Fly Variables
-local SpeedEnabled = false
-local WalkSpeedValue = 16
-local Flying = false
-local FlySpeed = 50
+local SpeedEnabled, WalkSpeedValue = false, 16
+local Flying, FlySpeed = false, 50
+local InfJumpEnabled = false
+local AimlockEnabled, TeamCheck = false, true
 
 -- MAIN TAB UI
-MainTab:CreateButton({
-   Name = "Print Hello",
-   Callback = function() print("hello") end,
-})
-
--- SPEED SECTION
 MainTab:CreateToggle({
    Name = "Enable Speed",
    CurrentValue = false,
-   Flag = "SpeedToggle",
    Callback = function(Value)
        SpeedEnabled = Value
-       if not Value then
-           -- Reset to default when turned off
-           local Hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-           if Hum then Hum.WalkSpeed = 16 end
-       end
+       if not Value and LocalPlayer.Character then LocalPlayer.Character.Humanoid.WalkSpeed = 16 end
    end,
 })
 
@@ -52,38 +52,30 @@ MainTab:CreateSlider({
    Name = "WalkSpeed",
    Range = {16, 500},
    Increment = 1,
-   Suffix = "Studs",
    CurrentValue = 16,
-   Flag = "SpeedSlider",
-   Callback = function(Value)
-       WalkSpeedValue = Value
-   end,
+   Callback = function(Value) WalkSpeedValue = Value end,
 })
 
--- FLY SECTION
 MainTab:CreateToggle({
    Name = "Mobile Fly",
    CurrentValue = false,
    Callback = function(Value)
        Flying = Value
-       local Character = LocalPlayer.Character
-       if Character and Character:FindFirstChild("HumanoidRootPart") then
+       if LocalPlayer.Character then
+           local Root = LocalPlayer.Character.HumanoidRootPart
            if Flying then
-               local BV = Instance.new("BodyVelocity", Character.HumanoidRootPart)
+               local BV = Instance.new("BodyVelocity", Root)
                BV.Name = "FlyBV"
                BV.MaxForce = Vector3.new(1e6, 1e6, 1e6)
-               BV.Velocity = Vector3.new(0, 0, 0)
-
-               local BG = Instance.new("BodyGyro", Character.HumanoidRootPart)
+               BV.Velocity = Vector3.new(0,0,0)
+               local BG = Instance.new("BodyGyro", Root)
                BG.Name = "FlyBG"
                BG.MaxTorque = Vector3.new(1e6, 1e6, 1e6)
-               BG.CFrame = Character.HumanoidRootPart.CFrame
-               
-               Character.Humanoid.PlatformStand = true
+               LocalPlayer.Character.Humanoid.PlatformStand = true
            else
-               if Character.HumanoidRootPart:FindFirstChild("FlyBV") then Character.HumanoidRootPart.FlyBV:Destroy() end
-               if Character.HumanoidRootPart:FindFirstChild("FlyBG") then Character.HumanoidRootPart.FlyBG:Destroy() end
-               Character.Humanoid.PlatformStand = false
+               if Root:FindFirstChild("FlyBV") then Root.FlyBV:Destroy() end
+               if Root:FindFirstChild("FlyBG") then Root.FlyBG:Destroy() end
+               LocalPlayer.Character.Humanoid.PlatformStand = false
            end
        end
    end,
@@ -93,40 +85,63 @@ MainTab:CreateSlider({
    Name = "Fly Speed",
    Range = {10, 500},
    Increment = 5,
-   Suffix = "Speed",
    CurrentValue = 50,
-   Callback = function(Value)
-       FlySpeed = Value
-   end,
+   Callback = function(Value) FlySpeed = Value end,
 })
 
--- COMBAT TAB (Aimlock)
-local AimlockEnabled = false
+MainTab:CreateToggle({
+   Name = "Infinite Jump",
+   CurrentValue = false,
+   Callback = function(Value) InfJumpEnabled = Value end,
+})
+
+-- COMBAT TAB UI
 CombatTab:CreateToggle({
    Name = "Aimlock",
    CurrentValue = false,
    Callback = function(Value) AimlockEnabled = Value end,
 })
 
--- CORE LOOP (Handles Speed, Fly, and Aimlock)
+CombatTab:CreateToggle({
+   Name = "Team Check",
+   CurrentValue = true,
+   Callback = function(Value) TeamCheck = Value end,
+})
+
+-- LOGIC LOOPS
 RunService.RenderStepped:Connect(function()
-    local Character = LocalPlayer.Character
-    if not Character then return end
-    local Hum = Character:FindFirstChildOfClass("Humanoid")
-    local Root = Character:FindFirstChild("HumanoidRootPart")
+    if not LocalPlayer.Character then return end
+    local Hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+    local Root = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
 
-    -- Constant Speed Logic (Bypasses most anti-cheats that reset speed)
-    if SpeedEnabled and Hum and not Flying then
-        Hum.WalkSpeed = WalkSpeedValue
-    end
-
-    -- Fly Logic
+    if SpeedEnabled and Hum and not Flying then Hum.WalkSpeed = WalkSpeedValue end
+    
     if Flying and Root and Hum then
-        local BV = Root:FindFirstChild("FlyBV")
-        local BG = Root:FindFirstChild("FlyBG")
-        if BV and BG then
-            BV.Velocity = Hum.MoveDirection * FlySpeed
-            BG.CFrame = Camera.CFrame
+        if Root:FindFirstChild("FlyBV") and Root:FindFirstChild("FlyBG") then
+            Root.FlyBV.Velocity = Hum.MoveDirection * FlySpeed
+            Root.FlyBG.CFrame = Camera.CFrame
         end
+    end
+    
+    if AimlockEnabled then
+        local Target = nil
+        local Dist = math.huge
+        for _, P in pairs(Players:GetPlayers()) do
+            if P ~= LocalPlayer and P.Character and P.Character:FindFirstChild("Humanoid") and P.Character.Humanoid.Health > 0 then
+                if TeamCheck and P.Team == LocalPlayer.Team then continue end
+                local Pos, OnScreen = Camera:WorldToViewportPoint(P.Character.HumanoidRootPart.Position)
+                if OnScreen then
+                    local Mag = (Vector2.new(Pos.X, Pos.Y) - Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)).Magnitude
+                    if Mag < Dist then Target = P; Dist = Mag end
+                end
+            end
+        end
+        if Target then Camera.CFrame = CFrame.new(Camera.CFrame.Position, Target.Character.HumanoidRootPart.Position) end
+    end
+end)
+
+game:GetService("UserInputService").JumpRequest:Connect(function()
+    if InfJumpEnabled and LocalPlayer.Character then
+        LocalPlayer.Character:FindFirstChildOfClass("Humanoid"):ChangeState("Jumping")
     end
 end)
