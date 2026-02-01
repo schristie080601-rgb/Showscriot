@@ -34,20 +34,18 @@ local AimlockEnabled = false
 local TeamCheck = true
 local LockPart = "Head"
 local AimFOV = 150
+local Smoothness = 0.5 -- New Smoothness variable
 local CurrentTarget = nil
 
 -- FOV Circle Visual
 local FOVCircle = Drawing.new("Circle")
 FOVCircle.Thickness = 2
 FOVCircle.Color = Color3.fromRGB(0, 150, 255)
-FOVCircle.Filled = false
-FOVCircle.Transparency = 1
 FOVCircle.Visible = false
 
--- TEAM CHECK FUNCTION (Fixed)
+-- TEAM CHECK FUNCTION
 local function IsOnTeam(Player)
     if not TeamCheck then return false end
-    -- Checks both Team object and TeamColor for better compatibility
     if Player.Team == LocalPlayer.Team or Player.TeamColor == LocalPlayer.TeamColor then
         return true
     end
@@ -61,11 +59,8 @@ local function GetClosestToCursor()
 
     for _, Player in pairs(Players:GetPlayers()) do
         if Player ~= LocalPlayer and Player.Character and Player.Character:FindFirstChild(LockPart) then
-            -- Health Check
             local Hum = Player.Character:FindFirstChildOfClass("Humanoid")
             if not Hum or Hum.Health <= 0 then continue end
-            
-            -- FIXED TEAM CHECK
             if IsOnTeam(Player) then continue end
 
             local Pos, OnScreen = Camera:WorldToViewportPoint(Player.Character[LockPart].Position)
@@ -86,12 +81,22 @@ end
 
 -- COMBAT UI
 CombatTab:CreateToggle({
-   Name = "Aimlock Until Kill (Chain Lock)",
+   Name = "Aimlock (Chain Lock)",
    CurrentValue = false,
    Callback = function(Value)
        AimlockEnabled = Value
        FOVCircle.Visible = Value
        if not Value then CurrentTarget = nil end
+   end,
+})
+
+CombatTab:CreateSlider({
+   Name = "Aim Smoothness",
+   Range = {0, 1},
+   Increment = 0.1,
+   CurrentValue = 0.5,
+   Callback = function(Value)
+       Smoothness = Value
    end,
 })
 
@@ -111,7 +116,7 @@ CombatTab:CreateToggle({
    CurrentValue = true,
    Callback = function(Value) 
        TeamCheck = Value 
-       CurrentTarget = nil -- Reset target so it re-checks teams
+       CurrentTarget = nil 
    end,
 })
 
@@ -125,14 +130,18 @@ RunService.RenderStepped:Connect(function()
     FOVCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
     
     if AimlockEnabled then
-        -- Refresh target if dead or team changed
         if CurrentTarget == nil or not CurrentTarget.Character or not CurrentTarget.Character:FindFirstChild(LockPart) or (CurrentTarget.Character:FindFirstChildOfClass("Humanoid") and CurrentTarget.Character.Humanoid.Health <= 0) or IsOnTeam(CurrentTarget) then
             CurrentTarget = GetClosestToCursor()
         end
 
-        -- Lock Camera
         if CurrentTarget and CurrentTarget.Character and CurrentTarget.Character:FindFirstChild(LockPart) then
-            Camera.CFrame = CFrame.new(Camera.CFrame.Position, CurrentTarget.Character[LockPart].Position)
+            -- The FIX: Interpolate CFrame for smoothness and direct vector calculation
+            local TargetPos = CurrentTarget.Character[LockPart].Position
+            local CameraPos = Camera.CFrame.Position
+            
+            -- We use lerp (Linear Interpolation) so it doesn't just "snap" to the floor instantly
+            local TargetCFrame = CFrame.new(CameraPos, TargetPos)
+            Camera.CFrame = Camera.CFrame:Lerp(TargetCFrame, 1 - Smoothness)
         end
     end
 
