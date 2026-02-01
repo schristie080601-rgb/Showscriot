@@ -12,8 +12,8 @@ local MainWindow = Rayfield:CreateWindow({
    KeySystem = true, 
    KeySettings = {
       Title = "Shadow Hub | Key System",
-      Subtitle = "Enter the access key",
-      Note = "The key is: main",
+      Subtitle = "Key is: main",
+      Note = "Join the discord for keys",
       FileName = "ShadowKey", 
       SaveKey = true, 
       Key = {"main"}
@@ -23,41 +23,49 @@ local MainWindow = Rayfield:CreateWindow({
 local MainTab = MainWindow:CreateTab("Main", 4483362458)
 local CombatTab = MainWindow:CreateTab("Combat", 4483362458)
 
--- Variables
+-- Services & Variables
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local RunService = game:GetService("RunService")
 local Camera = workspace.CurrentCamera
 
--- Combat Config
+-- Combat Settings
 local AimlockEnabled = false
 local TeamCheck = true
-local LockPart = "Head" -- Can change to "HumanoidRootPart"
+local LockPart = "Head"
+local AimFOV = 150 -- Size of the lock-on circle
 
--- Movement Config
+-- Movement Settings
 local SpeedEnabled, WalkSpeedValue = false, 16
-local Flying, FlySpeed = false, 50
 local InfJumpEnabled = false
 
+-- FOV Circle Visual
+local FOVCircle = Drawing.new("Circle")
+FOVCircle.Thickness = 2
+FOVCircle.Color = Color3.fromRGB(0, 150, 255)
+FOVCircle.Filled = false
+FOVCircle.Transparency = 1
+FOVCircle.Visible = false
+
 -- FUNCTIONS
-local function GetClosestEnemy()
+local function GetClosestToCursor()
     local Target = nil
-    local ShortestDistance = math.huge
+    local ShortestDistance = AimFOV
 
     for _, Player in pairs(Players:GetPlayers()) do
         if Player ~= LocalPlayer and Player.Character and Player.Character:FindFirstChild(LockPart) then
-            -- Death Check
-            local Humanoid = Player.Character:FindFirstChildOfClass("Humanoid")
-            if not Humanoid or Humanoid.Health <= 0 then continue end
-            
-            -- Team Check
+            -- Check Health & Team
+            local Hum = Player.Character:FindFirstChildOfClass("Humanoid")
+            if not Hum or Hum.Health <= 0 then continue end
             if TeamCheck and Player.Team == LocalPlayer.Team then continue end
 
-            -- Get Screen Position
             local Pos, OnScreen = Camera:WorldToViewportPoint(Player.Character[LockPart].Position)
             
             if OnScreen then
-                local Distance = (Vector2.new(Pos.X, Pos.Y) - Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)).Magnitude
+                -- Calculate distance from mouse/center of screen
+                local MousePos = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+                local Distance = (Vector2.new(Pos.X, Pos.Y) - MousePos).Magnitude
+                
                 if Distance < ShortestDistance then
                     Target = Player
                     ShortestDistance = Distance
@@ -68,41 +76,38 @@ local function GetClosestEnemy()
     return Target
 end
 
--- COMBAT TAB
+-- COMBAT UI
 CombatTab:CreateToggle({
-   Name = "Enable Aimlock (Through Walls)",
+   Name = "Aimlock (Closest to Cursor)",
    CurrentValue = false,
    Callback = function(Value)
        AimlockEnabled = Value
+       FOVCircle.Visible = Value
+   end,
+})
+
+CombatTab:CreateSlider({
+   Name = "Aim FOV (Lock Radius)",
+   Range = {50, 800},
+   Increment = 10,
+   CurrentValue = 150,
+   Callback = function(Value)
+       AimFOV = Value
+       FOVCircle.Radius = Value
    end,
 })
 
 CombatTab:CreateToggle({
    Name = "Team Check",
    CurrentValue = true,
-   Callback = function(Value)
-       TeamCheck = Value
-   end,
+   Callback = function(Value) TeamCheck = Value end,
 })
 
-CombatTab:CreateDropdown({
-   Name = "Aim Part",
-   Options = {"Head", "HumanoidRootPart"},
-   CurrentOption = {"Head"},
-   MultipleOptions = false,
-   Callback = function(Option)
-       LockPart = Option[1]
-   end,
-})
-
--- MAIN TAB (Movement Features)
+-- MAIN UI
 MainTab:CreateToggle({
    Name = "Enable Speed",
    CurrentValue = false,
-   Callback = function(Value)
-       SpeedEnabled = Value
-       if not Value and LocalPlayer.Character then LocalPlayer.Character.Humanoid.WalkSpeed = 16 end
-   end,
+   Callback = function(V) SpeedEnabled = V end,
 })
 
 MainTab:CreateSlider({
@@ -110,31 +115,31 @@ MainTab:CreateSlider({
    Range = {16, 500},
    Increment = 1,
    CurrentValue = 16,
-   Callback = function(Value) WalkSpeedValue = Value end,
+   Callback = function(V) WalkSpeedValue = V end,
 })
 
 MainTab:CreateToggle({
    Name = "Infinite Jump",
    CurrentValue = false,
-   Callback = function(Value) InfJumpEnabled = Value end,
+   Callback = function(V) InfJumpEnabled = V end,
 })
 
--- LOOPS
+-- MAIN LOOP
 RunService.RenderStepped:Connect(function()
-    -- Aimlock Logic
+    -- Update FOV Circle Position
+    FOVCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+    FOVCircle.Radius = AimFOV
+
     if AimlockEnabled then
-        local Target = GetClosestEnemy()
+        local Target = GetClosestToCursor()
         if Target and Target.Character and Target.Character:FindFirstChild(LockPart) then
-            -- Smoothly interpolate camera to target
+            -- Snaps camera to target
             Camera.CFrame = CFrame.new(Camera.CFrame.Position, Target.Character[LockPart].Position)
         end
     end
 
-    -- Movement Logic
-    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
-        if SpeedEnabled then
-            LocalPlayer.Character.Humanoid.WalkSpeed = WalkSpeedValue
-        end
+    if SpeedEnabled and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+        LocalPlayer.Character.Humanoid.WalkSpeed = WalkSpeedValue
     end
 end)
 
