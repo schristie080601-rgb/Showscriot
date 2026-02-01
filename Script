@@ -23,108 +23,124 @@ local MainWindow = Rayfield:CreateWindow({
 local MainTab = MainWindow:CreateTab("Main", 4483362458)
 local CombatTab = MainWindow:CreateTab("Combat", 4483362458)
 
+-- Variables
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local RunService = game:GetService("RunService")
 local Camera = workspace.CurrentCamera
 
+-- Combat Config
+local AimlockEnabled = false
+local TeamCheck = true
+local LockPart = "Head" -- Can change to "HumanoidRootPart"
+
+-- Movement Config
 local SpeedEnabled, WalkSpeedValue = false, 16
 local Flying, FlySpeed = false, 50
 local InfJumpEnabled = false
-local AimlockEnabled, TeamCheck = false, true
-
--- Fling Variables
-local FlingTarget = ""
-local Flinging = false
 
 -- FUNCTIONS
-local function GetPlayer(String)
-    if not String then return nil end
-    for _, v in pairs(Players:GetPlayers()) do
-        if v.Name:lower():sub(1, #String) == String:lower() or v.DisplayName:lower():sub(1, #String) == String:lower() then
-            return v
+local function GetClosestEnemy()
+    local Target = nil
+    local ShortestDistance = math.huge
+
+    for _, Player in pairs(Players:GetPlayers()) do
+        if Player ~= LocalPlayer and Player.Character and Player.Character:FindFirstChild(LockPart) then
+            -- Death Check
+            local Humanoid = Player.Character:FindFirstChildOfClass("Humanoid")
+            if not Humanoid or Humanoid.Health <= 0 then continue end
+            
+            -- Team Check
+            if TeamCheck and Player.Team == LocalPlayer.Team then continue end
+
+            -- Get Screen Position
+            local Pos, OnScreen = Camera:WorldToViewportPoint(Player.Character[LockPart].Position)
+            
+            if OnScreen then
+                local Distance = (Vector2.new(Pos.X, Pos.Y) - Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)).Magnitude
+                if Distance < ShortestDistance then
+                    Target = Player
+                    ShortestDistance = Distance
+                end
+            end
         end
     end
-    return nil
+    return Target
 end
 
--- COMBAT TAB UI (Fling added here)
-CombatTab:CreateInput({
-   Name = "Fling Player",
-   PlaceholderText = "Type Username...",
-   RemoveTextAfterFocusLost = false,
-   Callback = function(Text)
-       FlingTarget = Text
-   end,
-})
-
+-- COMBAT TAB
 CombatTab:CreateToggle({
-   Name = "Start Flinging",
+   Name = "Enable Aimlock (Through Walls)",
    CurrentValue = false,
    Callback = function(Value)
-       Flinging = Value
-       
-       if Flinging then
-           local Target = GetPlayer(FlingTarget)
-           if Target and Target.Character and Target.Character:FindFirstChild("HumanoidRootPart") then
-               -- Create high-speed rotation to cause the fling
-               local Root = LocalPlayer.Character.HumanoidRootPart
-               local OriginalVelocity = Root.Velocity
-               
-               while Flinging and Target.Character and Target.Character:FindFirstChild("HumanoidRootPart") do
-                   RunService.Heartbeat:Wait()
-                   
-                   -- Physics glitch: High angular velocity + positioning
-                   Root.CFrame = Target.Character.HumanoidRootPart.CFrame * CFrame.Angles(0, math.rad(LocalPlayer.Character.HumanoidRootPart.Rotation.Y + 90), 0)
-                   Root.Velocity = Vector3.new(5000, 5000, 5000) -- Velocity "Charge"
-                   
-                   -- Disable collisions to avoid getting flung yourself
-                   for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
-                       if part:IsA("BasePart") then
-                           part.CanCollide = false
-                       end
-                   end
-               end
-               -- Reset
-               Root.Velocity = Vector3.new(0,0,0)
-           else
-               Rayfield:Notify({Title = "Error", Content = "Player not found!", Duration = 3})
-           end
-       end
+       AimlockEnabled = Value
    end,
 })
 
--- Keep your previous Combat/Main features here...
 CombatTab:CreateToggle({
-   Name = "Aimlock",
-   CurrentValue = false,
-   Callback = function(Value) AimlockEnabled = Value end,
+   Name = "Team Check",
+   CurrentValue = true,
+   Callback = function(Value)
+       TeamCheck = Value
+   end,
 })
 
--- MAIN TAB (Speed/Fly/Jump)
-MainTab:CreateToggle({ Name = "Enable Speed", CurrentValue = false, Callback = function(V) SpeedEnabled = V end })
-MainTab:CreateSlider({ Name = "WalkSpeed", Range = {16, 500}, Increment = 1, CurrentValue = 16, Callback = function(V) WalkSpeedValue = V end })
-MainTab:CreateToggle({ Name = "Mobile Fly", CurrentValue = false, Callback = function(V) Flying = V end })
--- (Add back the fly/jump logic from your previous version)
+CombatTab:CreateDropdown({
+   Name = "Aim Part",
+   Options = {"Head", "HumanoidRootPart"},
+   CurrentOption = {"Head"},
+   MultipleOptions = false,
+   Callback = function(Option)
+       LockPart = Option[1]
+   end,
+})
 
--- CORE LOGIC LOOP
+-- MAIN TAB (Movement Features)
+MainTab:CreateToggle({
+   Name = "Enable Speed",
+   CurrentValue = false,
+   Callback = function(Value)
+       SpeedEnabled = Value
+       if not Value and LocalPlayer.Character then LocalPlayer.Character.Humanoid.WalkSpeed = 16 end
+   end,
+})
+
+MainTab:CreateSlider({
+   Name = "Speed Amount",
+   Range = {16, 500},
+   Increment = 1,
+   CurrentValue = 16,
+   Callback = function(Value) WalkSpeedValue = Value end,
+})
+
+MainTab:CreateToggle({
+   Name = "Infinite Jump",
+   CurrentValue = false,
+   Callback = function(Value) InfJumpEnabled = Value end,
+})
+
+-- LOOPS
 RunService.RenderStepped:Connect(function()
-    if not LocalPlayer.Character then return end
-    local Hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-    local Root = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-
-    if SpeedEnabled and Hum and not Flying then Hum.WalkSpeed = WalkSpeedValue end
-    
-    if Flying and Root and Hum then
-        local BV = Root:FindFirstChild("FlyBV")
-        local BG = Root:FindFirstChild("FlyBG")
-        if BV and BG then
-            BV.Velocity = Hum.MoveDirection * FlySpeed
-            BG.CFrame = Camera.CFrame
+    -- Aimlock Logic
+    if AimlockEnabled then
+        local Target = GetClosestEnemy()
+        if Target and Target.Character and Target.Character:FindFirstChild(LockPart) then
+            -- Smoothly interpolate camera to target
+            Camera.CFrame = CFrame.new(Camera.CFrame.Position, Target.Character[LockPart].Position)
         end
     end
-    
-    if AimlockEnabled then
-        -- (Aimlock logic remains same)
+
+    -- Movement Logic
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
+        if SpeedEnabled then
+            LocalPlayer.Character.Humanoid.WalkSpeed = WalkSpeedValue
+        end
+    end
+end)
+
+-- Jump Logic
+game:GetService("UserInputService").JumpRequest:Connect(function()
+    if InfJumpEnabled and LocalPlayer.Character then
+        LocalPlayer.Character:FindFirstChildOfClass("Humanoid"):ChangeState("Jumping")
     end
 end)
