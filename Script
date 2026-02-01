@@ -33,11 +33,8 @@ local Camera = workspace.CurrentCamera
 local AimlockEnabled = false
 local TeamCheck = true
 local LockPart = "Head"
-local AimFOV = 150 -- Size of the lock-on circle
-
--- Movement Settings
-local SpeedEnabled, WalkSpeedValue = false, 16
-local InfJumpEnabled = false
+local AimFOV = 150
+local CurrentTarget = nil
 
 -- FOV Circle Visual
 local FOVCircle = Drawing.new("Circle")
@@ -54,15 +51,16 @@ local function GetClosestToCursor()
 
     for _, Player in pairs(Players:GetPlayers()) do
         if Player ~= LocalPlayer and Player.Character and Player.Character:FindFirstChild(LockPart) then
-            -- Check Health & Team
+            -- Death Check (Skip dead players)
             local Hum = Player.Character:FindFirstChildOfClass("Humanoid")
             if not Hum or Hum.Health <= 0 then continue end
+            
+            -- Team Check
             if TeamCheck and Player.Team == LocalPlayer.Team then continue end
 
             local Pos, OnScreen = Camera:WorldToViewportPoint(Player.Character[LockPart].Position)
             
             if OnScreen then
-                -- Calculate distance from mouse/center of screen
                 local MousePos = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
                 local Distance = (Vector2.new(Pos.X, Pos.Y) - MousePos).Magnitude
                 
@@ -78,16 +76,17 @@ end
 
 -- COMBAT UI
 CombatTab:CreateToggle({
-   Name = "Aimlock (Closest to Cursor)",
+   Name = "Aimlock Until Kill (Chain Lock)",
    CurrentValue = false,
    Callback = function(Value)
        AimlockEnabled = Value
        FOVCircle.Visible = Value
+       if not Value then CurrentTarget = nil end
    end,
 })
 
 CombatTab:CreateSlider({
-   Name = "Aim FOV (Lock Radius)",
+   Name = "Aim FOV Radius",
    Range = {50, 800},
    Increment = 10,
    CurrentValue = 150,
@@ -103,49 +102,28 @@ CombatTab:CreateToggle({
    Callback = function(Value) TeamCheck = Value end,
 })
 
--- MAIN UI
-MainTab:CreateToggle({
-   Name = "Enable Speed",
-   CurrentValue = false,
-   Callback = function(V) SpeedEnabled = V end,
-})
-
-MainTab:CreateSlider({
-   Name = "Speed Amount",
-   Range = {16, 500},
-   Increment = 1,
-   CurrentValue = 16,
-   Callback = function(V) WalkSpeedValue = V end,
-})
-
-MainTab:CreateToggle({
-   Name = "Infinite Jump",
-   CurrentValue = false,
-   Callback = function(V) InfJumpEnabled = V end,
-})
+-- MAIN TAB (Movement)
+local SpeedEnabled, WalkSpeedValue = false, 16
+MainTab:CreateToggle({ Name = "Enable Speed", CurrentValue = false, Callback = function(V) SpeedEnabled = V end })
+MainTab:CreateSlider({ Name = "Speed Amount", Range = {16, 500}, Increment = 1, CurrentValue = 16, Callback = function(V) WalkSpeedValue = V end })
 
 -- MAIN LOOP
 RunService.RenderStepped:Connect(function()
-    -- Update FOV Circle Position
     FOVCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
-    FOVCircle.Radius = AimFOV
-
+    
     if AimlockEnabled then
-        local Target = GetClosestToCursor()
-        if Target and Target.Character and Target.Character:FindFirstChild(LockPart) then
-            -- Snaps camera to target
-            Camera.CFrame = CFrame.new(Camera.CFrame.Position, Target.Character[LockPart].Position)
+        -- Logic: If we don't have a target, or the target died, find a new one
+        if CurrentTarget == nil or not CurrentTarget.Character or not CurrentTarget.Character:FindFirstChild(LockPart) or (CurrentTarget.Character:FindFirstChildOfClass("Humanoid") and CurrentTarget.Character.Humanoid.Health <= 0) then
+            CurrentTarget = GetClosestToCursor()
+        end
+
+        -- Lock Camera to the current valid target
+        if CurrentTarget and CurrentTarget.Character and CurrentTarget.Character:FindFirstChild(LockPart) then
+            Camera.CFrame = CFrame.new(Camera.CFrame.Position, CurrentTarget.Character[LockPart].Position)
         end
     end
 
     if SpeedEnabled and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
         LocalPlayer.Character.Humanoid.WalkSpeed = WalkSpeedValue
-    end
-end)
-
--- Jump Logic
-game:GetService("UserInputService").JumpRequest:Connect(function()
-    if InfJumpEnabled and LocalPlayer.Character then
-        LocalPlayer.Character:FindFirstChildOfClass("Humanoid"):ChangeState("Jumping")
     end
 end)
