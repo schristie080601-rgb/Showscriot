@@ -44,19 +44,29 @@ FOVCircle.Filled = false
 FOVCircle.Transparency = 1
 FOVCircle.Visible = false
 
--- FUNCTIONS
+-- TEAM CHECK FUNCTION (Fixed)
+local function IsOnTeam(Player)
+    if not TeamCheck then return false end
+    -- Checks both Team object and TeamColor for better compatibility
+    if Player.Team == LocalPlayer.Team or Player.TeamColor == LocalPlayer.TeamColor then
+        return true
+    end
+    return false
+end
+
+-- TARGETING FUNCTION
 local function GetClosestToCursor()
     local Target = nil
     local ShortestDistance = AimFOV
 
     for _, Player in pairs(Players:GetPlayers()) do
         if Player ~= LocalPlayer and Player.Character and Player.Character:FindFirstChild(LockPart) then
-            -- Death Check (Skip dead players)
+            -- Health Check
             local Hum = Player.Character:FindFirstChildOfClass("Humanoid")
             if not Hum or Hum.Health <= 0 then continue end
             
-            -- Team Check
-            if TeamCheck and Player.Team == LocalPlayer.Team then continue end
+            -- FIXED TEAM CHECK
+            if IsOnTeam(Player) then continue end
 
             local Pos, OnScreen = Camera:WorldToViewportPoint(Player.Character[LockPart].Position)
             
@@ -99,7 +109,10 @@ CombatTab:CreateSlider({
 CombatTab:CreateToggle({
    Name = "Team Check",
    CurrentValue = true,
-   Callback = function(Value) TeamCheck = Value end,
+   Callback = function(Value) 
+       TeamCheck = Value 
+       CurrentTarget = nil -- Reset target so it re-checks teams
+   end,
 })
 
 -- MAIN TAB (Movement)
@@ -112,12 +125,12 @@ RunService.RenderStepped:Connect(function()
     FOVCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
     
     if AimlockEnabled then
-        -- Logic: If we don't have a target, or the target died, find a new one
-        if CurrentTarget == nil or not CurrentTarget.Character or not CurrentTarget.Character:FindFirstChild(LockPart) or (CurrentTarget.Character:FindFirstChildOfClass("Humanoid") and CurrentTarget.Character.Humanoid.Health <= 0) then
+        -- Refresh target if dead or team changed
+        if CurrentTarget == nil or not CurrentTarget.Character or not CurrentTarget.Character:FindFirstChild(LockPart) or (CurrentTarget.Character:FindFirstChildOfClass("Humanoid") and CurrentTarget.Character.Humanoid.Health <= 0) or IsOnTeam(CurrentTarget) then
             CurrentTarget = GetClosestToCursor()
         end
 
-        -- Lock Camera to the current valid target
+        -- Lock Camera
         if CurrentTarget and CurrentTarget.Character and CurrentTarget.Character:FindFirstChild(LockPart) then
             Camera.CFrame = CFrame.new(Camera.CFrame.Position, CurrentTarget.Character[LockPart].Position)
         end
